@@ -1,6 +1,10 @@
 #include <SoftwareSerial.h>
 #include <TinyGPS.h>
+#include "FS.h"
+#include "SD.h"
+#include "SPI.h"
 
+#define SD_CS 5
 
 TinyGPS gps;
 SoftwareSerial ss(4, 3);
@@ -11,13 +15,15 @@ static void print_int(unsigned long val, unsigned long invalid, int len);
 static void print_date(TinyGPS &gps);
 static void print_str(const char *str, int len);
 
+#define SD_CS 5
+
 void setup()
 {
   Serial.begin(115200);
   
   Serial.println();
-  Serial.println("Sats HDOP Latitude  Longitude  Fix  Date       Time     Date Alt    Course Speed Card  Distance Course Card  Chars Sentences Checksum");
-  Serial.println("          (deg)     (deg)      Age                      Age  (m)    --- from GPS ----  ---- to London  ----  RX    RX        Fail");
+  Serial.println("Sats HDOP Latitude  Longitude  Fix  Date       Time     Date Alt    Course Speed Card  Chars Sentences Checksum");
+  Serial.println("          (deg)     (deg)      Age                      Age  (m)    --- from GPS ----    RX    RX        Fail");
   Serial.println("-------------------------------------------------------------------------------------------------------------------------------------");
 
   ss.begin(4800);
@@ -41,10 +47,6 @@ void loop()
   print_float(gps.f_course(), TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
   print_float(gps.f_speed_kmph(), TinyGPS::GPS_INVALID_F_SPEED, 6, 2);
   print_str(gps.f_course() == TinyGPS::GPS_INVALID_F_ANGLE ? "*** " : TinyGPS::cardinal(gps.f_course()), 6);
-  print_int(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0xFFFFFFFF : (unsigned long)TinyGPS::distance_between(flat, flon, LONDON_LAT, LONDON_LON) / 1000, 0xFFFFFFFF, 9);
-  print_float(flat == TinyGPS::GPS_INVALID_F_ANGLE ? TinyGPS::GPS_INVALID_F_ANGLE : TinyGPS::course_to(flat, flon, LONDON_LAT, LONDON_LON), TinyGPS::GPS_INVALID_F_ANGLE, 7, 2);
-  print_str(flat == TinyGPS::GPS_INVALID_F_ANGLE ? "*** " : TinyGPS::cardinal(TinyGPS::course_to(flat, flon, LONDON_LAT, LONDON_LON)), 6);
-
   gps.stats(&chars, &sentences, &failed);
   print_int(chars, 0xFFFFFFFF, 6);
   print_int(sentences, 0xFFFFFFFF, 10);
