@@ -3,7 +3,9 @@
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
-
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WebServer.h>
 #define SD_CS 5
 
 TinyGPS gps;
@@ -15,23 +17,53 @@ static void print_int(unsigned long val, unsigned long invalid, int len);
 static void print_date(TinyGPS &gps);
 static void print_str(const char *str, int len);
 
-#define SD_CS 5
-
 int readingID = 0;
 String dataMessage;
+
+
+const char* ssid = "DELLZ48F27222";
+const char* password = "harenpatel";
+#include "index.h"  //Web page header file
+WebServer server(80);
 
 void setup()
 {
   Serial.begin(115200);
 
-  //SD card Initialize 
-  SD.begin(SD_CS);  
-  if(!SD.begin(SD_CS)) {
+  //GPS Initialize
+  Serial.println();
+  Serial.println("Sats HDOP Latitude  Longitude  Fix  Date       Time     Date Alt    Course Speed Card  Chars Sentences Checksum");
+  Serial.println("          (deg)     (deg)      Age                      Age  (m)    --- from GPS ----    RX    RX        Fail");
+  Serial.println("-------------------------------------------------------------------------------------------------------------------------------------");
+
+  ss.begin(4800);
+
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(" WiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  server.on("/", handleRoot);      //This is display page
+  server.on("/readADC", handleADC);//To get update of ADC Value only
+ 
+  server.begin();                  //Start server
+  Serial.println("HTTP server started");
+  
+
+  //SD card Initialize
+  SD.begin(SD_CS);
+  if (!SD.begin(SD_CS)) {
     Serial.println("Card Mount Failed");
     return;
   }
   uint8_t cardType = SD.cardType();
-  if(cardType == CARD_NONE) {
+  if (cardType == CARD_NONE) {
     Serial.println("No SD card attached");
     return;
   }
@@ -44,7 +76,7 @@ void setup()
   // If the data.txt file doesn't exist
   // Create a file on the SD card and write the data labels
   File file = SD.open("/data.txt");
-  if(!file) {
+  if (!file) {
     Serial.println("File doens't exist");
     Serial.println("Creating file...");
     writeFile(SD, "/data.txt", "Sats HDOP Latitude  Longitude  Fix  Date       Time     Date Alt    Course Speed Card  Chars Sentences Checksum \r\n");
@@ -52,17 +84,11 @@ void setup()
     appendFile(SD, "/data.txt", "------------------------------------------------------------------------------------------------------------------------------------- \r\n");
   }
   else {
-    Serial.println("File already exists");  
+    Serial.println("File already exists");
   }
   file.close();
 
-  //GPS Initialize
-  Serial.println();
-  Serial.println("Sats HDOP Latitude  Longitude  Fix  Date       Time     Date Alt    Course Speed Card  Chars Sentences Checksum");
-  Serial.println("          (deg)     (deg)      Age                      Age  (m)    --- from GPS ----    RX    RX        Fail");
-  Serial.println("-------------------------------------------------------------------------------------------------------------------------------------");
-
-  ss.begin(4800);
+  
 }
 
 void loop()
@@ -71,7 +97,7 @@ void loop()
   unsigned long age, date, time, chars = 0;
   unsigned short sentences = 0, failed = 0;
   static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
-  
+
   print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
   print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
   gps.f_get_position(&flat, &flon, &age);
@@ -88,17 +114,16 @@ void loop()
   print_int(sentences, 0xFFFFFFFF, 10);
   print_int(failed, 0xFFFFFFFF, 9);
   Serial.println();
-  
+  server.handleClient();
   smartdelay(1000);
-
+  
   logSDCard();
-  readingID++;
 }
 
 static void smartdelay(unsigned long ms)
 {
   unsigned long start = millis();
-  do 
+  do
   {
     while (ss.available())
       gps.encode(ss.read());
@@ -120,7 +145,7 @@ static void print_float(float val, float invalid, int len, int prec)
     int vi = abs((int)val);
     int flen = prec + (val < 0.0 ? 2 : 1); // . and -
     flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i=flen; i<len; ++i)
+    for (int i = flen; i < len; ++i)
       Serial.print(' ');
   }
   smartdelay(0);
@@ -134,10 +159,10 @@ static void print_int(unsigned long val, unsigned long invalid, int len)
   else
     sprintf(sz, "%ld", val);
   sz[len] = 0;
-  for (int i=strlen(sz); i<len; ++i)
+  for (int i = strlen(sz); i < len; ++i)
     sz[i] = ' ';
-  if (len > 0) 
-    sz[len-1] = ' ';
+  if (len > 0)
+    sz[len - 1] = ' ';
   Serial.print(sz);
   dataMessage = dataMessage + String(sz);
   smartdelay(0);
@@ -155,7 +180,7 @@ static void print_date(TinyGPS &gps)
   {
     char sz[32];
     sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
-        month, day, year, hour, minute, second);
+            month, day, year, hour, minute, second);
     Serial.print(sz);
     dataMessage = dataMessage + String(sz);
   }
@@ -166,9 +191,9 @@ static void print_date(TinyGPS &gps)
 static void print_str(const char *str, int len)
 {
   int slen = strlen(str);
-  for (int i=0; i<len; ++i)
-    Serial.print(i<slen ? str[i] : ' ');
-    dataMessage = dataMessage + str;
+  for (int i = 0; i < len; ++i)
+    Serial.print(i < slen ? str[i] : ' ');
+  dataMessage = dataMessage + str;
   smartdelay(0);
 }
 
@@ -186,11 +211,11 @@ void writeFile(fs::FS &fs, const char * path, const char * message) {
   Serial.printf("Writing file: %s\n", path);
 
   File file = fs.open(path, FILE_WRITE);
-  if(!file) {
+  if (!file) {
     Serial.println("Failed to open file for writing");
     return;
   }
-  if(file.print(message)) {
+  if (file.print(message)) {
     Serial.println("File written");
   } else {
     Serial.println("Write failed");
@@ -203,14 +228,26 @@ void appendFile(fs::FS &fs, const char * path, const char * message) {
   Serial.printf("Appending to file: %s\n", path);
 
   File file = fs.open(path, FILE_APPEND);
-  if(!file) {
+  if (!file) {
     Serial.println("Failed to open file for appending");
     return;
   }
-  if(file.print(message)) {
+  if (file.print(message)) {
     Serial.println("Message appended");
   } else {
     Serial.println("Append failed");
   }
   file.close();
+}
+
+void handleRoot() {
+ String s = MAIN_page; //Read HTML contents
+ server.send(200, "text/html", s); //Send web page
+}
+ 
+void handleADC() {
+ int a = analogRead(A0);
+ String adcValue = dataMessage;
+ 
+ server.send(200, "text/plane", adcValue); //Send ADC value only to client ajax request
 }
