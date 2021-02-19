@@ -19,7 +19,7 @@ static void print_str(const char *str, int len);
 
 int readingID = 0;
 String dataMessage;
-
+float flat, flon;
 
 const char* ssid = "DELLZ48F27222";
 const char* password = "harenpatel";
@@ -49,8 +49,10 @@ void setup()
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 
-  server.on("/", handleRoot);      //This is display page
-  server.on("/readADC", handleADC);//To get update of ADC Value only
+  server.on("/", handleRoot);
+  server.on("/readADC", handleADC);
+  server.on("/Latitude", Latitude);
+  server.on("/Longitude", Longitude);
  
   server.begin();                  //Start server
   Serial.println("HTTP server started");
@@ -93,7 +95,6 @@ void setup()
 
 void loop()
 {
-  float flat, flon;
   unsigned long age, date, time, chars = 0;
   unsigned short sentences = 0, failed = 0;
   static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
@@ -116,7 +117,7 @@ void loop()
   Serial.println();
   server.handleClient();
   smartdelay(1000);
-  
+  server.handleClient();
   logSDCard();
 }
 
@@ -223,7 +224,7 @@ void writeFile(fs::FS &fs, const char * path, const char * message) {
   file.close();
 }
 
-// Append data to the SD card (DON'T MODIFY THIS FUNCTION)
+// Append data to the SD card
 void appendFile(fs::FS &fs, const char * path, const char * message) {
   Serial.printf("Appending to file: %s\n", path);
 
@@ -246,8 +247,16 @@ void handleRoot() {
 }
  
 void handleADC() {
- int a = analogRead(A0);
  String adcValue = dataMessage;
- 
- server.send(200, "text/plane", adcValue); //Send ADC value only to client ajax request
+ server.send(200, "text/plane", adcValue);
+}
+
+void Latitude() {
+ String Latitude = String(flat);
+ server.send(200, "text/plane", Latitude);
+}
+
+void Longitude() {
+ String Longitude = String(flon);
+ server.send(200, "text/plane", Longitude);
 }
